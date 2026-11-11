@@ -166,6 +166,11 @@ public extension TelegramEngine {
             return _internal_stopIncomingTypingDraft(postbox: self.account.postbox, network: self.account.network, peerId: peerId, threadId: threadId)
         }
 
+        /// Visible-history read; explicit user read commands use the interactive API below.
+        public func nvxgramApplyAutomaticRead(index: MessageIndex) -> Signal<Void, NoError> {
+            return _internal_nvxgramApplyAutomaticRead(postbox: self.account.postbox, stateManager: self.account.stateManager, index: index)
+        }
+
         public func applyMaxReadIndexInteractively(index: MessageIndex) -> Signal<Void, NoError> {
             return _internal_applyMaxReadIndexInteractively(postbox: self.account.postbox, stateManager: self.account.stateManager, index: index)
         }

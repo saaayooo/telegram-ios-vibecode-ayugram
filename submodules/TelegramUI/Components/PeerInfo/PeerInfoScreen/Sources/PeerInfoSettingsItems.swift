@@ -261,6 +261,9 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 0, label: notificationsWarning ? .badge("!", presentationData.theme.list.itemDestructiveColor) : .none, text: presentationData.strings.Settings_NotificationsAndSounds, icon: PresentationResourcesSettings.notifications, labelAccessibilityText: notificationsWarning ? presentationData.strings.VoiceOver_TabBar_AttentionRequired : nil, action: {
         interaction.openSettings(.notificationsAndSounds)
     }))
+    items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 1001, text: "NVXGram", icon: PresentationResourcesSettings.security, action: {
+        interaction.openSettings(.nvxgram)
+    }))
     items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_PrivacySettings, icon: PresentationResourcesSettings.security, action: {
         interaction.openSettings(.privacyAndSecurity)
     }))

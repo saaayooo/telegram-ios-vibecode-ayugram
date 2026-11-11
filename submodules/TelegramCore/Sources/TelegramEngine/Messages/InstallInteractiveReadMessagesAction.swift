@@ -20,6 +20,11 @@ func _internal_installInteractiveReadMessagesAction(postbox: Postbox, stateManag
                     continue
                 }
                 
+                // Suppress only automatic processing of ordinary cloud history.
+                // Explicit consume/read actions and secret/expiring content stay native.
+                if threadId == nil, nvxgramSuppressesAutomaticRead(transaction: transaction, index: MessageIndex(id: id, timestamp: message.timestamp), hasExpiringContent: message.attributes.contains(where: { $0 is AutoremoveTimeoutMessageAttribute || $0 is AutoclearTimeoutMessageAttribute })) {
+                    continue
+                }
                 var hasUnconsumedMention = false
                 var hasUnconsumedContent = false
                 var hasUnseenReactions = false

@@ -1,0 +1,13 @@
+submodules/TelegramCore/Sources/State/ManagedAccountPresence.swift
+submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift
+submodules/TelegramCore/Sources/State/PendingMessageManager.swift
+submodules/TelegramCore/Sources/TelegramEngine/Messages/InstallInteractiveReadMessagesAction.swift
+submodules/TelegramCore/Sources/TelegramEngine/Messages/TelegramEngineMessages.swift
+submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift
+submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift
+submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
+submodules/TelegramUI/Sources/AccountContext.swift
+submodules/SettingsUI/Sources/NVXGramSettingsController.swift
+submodules/TelegramCore/Sources/Account/NVXGramPolicy.swift
+submodules/TelegramCore/Sources/Account/NVXGramPreferences.swift
+submodules/TelegramCore/Sources/TelegramEngine/Messages/NVXGramAutomaticRead.swift

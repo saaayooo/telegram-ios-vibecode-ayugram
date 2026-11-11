@@ -86,3 +86,9 @@ submodules/TelegramApi/ObjC/SwiftPMGenerated/
 submodules/TelegramApi/Tests/SwiftPMGenerated/
 /Telegram.app/
 build/accessibility/
+
+# NVXGram owner credentials belong in Actions secrets and RUNNER_TEMP only.
+/nvxgram/private/
+/nvxgram/*.p12
+/nvxgram/*.mobileprovision
+/nvxgram/configuration.json

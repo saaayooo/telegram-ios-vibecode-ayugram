@@ -1,109 +1,90 @@
-name: CI
-
+name: NVXGram v0.1
 on:
   push:
-    branches: [ master ]
-
+    branches: [master, nvxgram-v0.1]
   workflow_dispatch:
-
+    inputs:
+      build_ipa:
+        description: 'Build arm64 IPA artifact after owner configures signing secrets'
+        type: boolean
+        default: false
+permissions:
+  contents: read
 jobs:
-  build:
-    runs-on: macos-13
-
+  verify:
+    runs-on: xcode-27
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+      - name: Verify pinned Xcode and report runner
+        run: |
+          set -euo pipefail
+          NVX_XCODE=$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')
+          test -d "/Applications/Xcode_${NVX_XCODE}.app"
+          sudo xcode-select -s "/Applications/Xcode_${NVX_XCODE}.app/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -version | head -1 | grep -Fx "Xcode ${NVX_XCODE}"
+          sw_vers
+          uname -m
+      - name: Policy and persistence tests
+        run: bash nvxgram/test.sh
+      - name: Parse changed Swift sources (not a full type check)
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          paths = Path('nvxgram/swift-files.txt').read_text().splitlines()
+          subprocess.run(['swiftc', '-frontend', '-parse', *paths], check=True)
+          PY
+  ipa:
+    if: github.event_name == 'workflow_dispatch' && inputs.build_ipa
+    needs: verify
+    runs-on: xcode-27
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
-          fetch-depth: '0'
-
-      - name: Set active Xcode path
+          submodules: recursive
+      - name: Select exact Xcode
         run: |
-          XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
-          sudo xcode-select -s /Applications/Xcode_$XCODE_VERSION.app/Contents/Developer
-
-      - name: Create canonical source directory
+          NVX_XCODE=$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')
+          sudo xcode-select -s "/Applications/Xcode_${NVX_XCODE}.app/Contents/Developer"
+          xcodebuild -version | head -1 | grep -Fx "Xcode ${NVX_XCODE}"
+      - name: Prepare owner credentials in temporary directory
+        env:
+          NVX_API_ID: ${{ secrets.NVX_API_ID }}
+          NVX_API_HASH: ${{ secrets.NVX_API_HASH }}
+          NVX_TEAM_ID: ${{ secrets.NVX_TEAM_ID }}
+          NVX_CERTIFICATE_P12_BASE64: ${{ secrets.NVX_CERTIFICATE_P12_BASE64 }}
+          NVX_CERTIFICATE_PASSWORD: ${{ secrets.NVX_CERTIFICATE_PASSWORD }}
+          NVX_PROFILES_ZIP_BASE64: ${{ secrets.NVX_PROFILES_ZIP_BASE64 }}
+        run: python3 nvxgram/prepare_build.py
+      - name: Build release arm64 IPA
         run: |
-          set -x
-          sudo mkdir -p /Users/Shared
-          cp -R $GITHUB_WORKSPACE /Users/Shared/
-          mv /Users/Shared/$(basename $GITHUB_WORKSPACE) /Users/Shared/telegram-ios
-
-      - name: Build the App
-        run: |
-          set -x
-
-          # source code paths are included in the final binary, so we need to make them stable across builds
-          SOURCE_DIR=/Users/Shared/telegram-ios
-
-          # use canonical bazel root
-          BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
-
-          cd $SOURCE_DIR
-
-          BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
-
-          export APP_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["app"]);')
-          export COMMIT_COUNT=$(git rev-list --count HEAD)
-          export COMMIT_COUNT="$(($COMMIT_COUNT+$BUILD_NUMBER_OFFSET))"
-          export BUILD_NUMBER="$COMMIT_COUNT"
-          echo "BUILD_NUMBER=$(echo $BUILD_NUMBER)" >> $GITHUB_ENV
-          echo "APP_VERSION=$(echo $APP_VERSION)" >> $GITHUB_ENV
-
-          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
           python3 -u build-system/Make/Make.py \
-            --bazelUserRoot="$BAZEL_USER_ROOT" \
-            build \
-            --configurationPath="build-system/appstore-configuration.json" \
-            --codesigningInformationPath=build-system/fake-codesigning \
+            --cacheDir="$RUNNER_TEMP/nvxgram-bazel-cache" build \
+            --configurationPath="$RUNNER_TEMP/nvxgram-signing/configuration.json" \
+            --codesigningInformationPath="$RUNNER_TEMP/nvxgram-signing" \
             --configuration=release_arm64 \
-            --buildNumber="$BUILD_NUMBER"
-
-          # collect ipa
-          OUTPUT_PATH="build/artifacts"
-          rm -rf "$OUTPUT_PATH"
-          mkdir -p "$OUTPUT_PATH"
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
-            cp "$f" $OUTPUT_PATH/
-          done
-
-          # collect dsym
-          mkdir -p build/DSYMs
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
-            cp -R "$f" build/DSYMs/
-          done
-          zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            --buildNumber="$GITHUB_RUN_NUMBER" \
+            --outputBuildArtifactsPath="$RUNNER_TEMP/nvxgram-artifacts"
+      - name: Check bundle, architecture and signature
+        run: |
+          set -euo pipefail
+          unzip -q "$RUNNER_TEMP/nvxgram-artifacts/Telegram.ipa" -d "$RUNNER_TEMP/nvxgram-inspect"
+          NVX_APP="$RUNNER_TEMP/nvxgram-inspect/Payload/Telegram.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$NVX_APP/Info.plist")" = org.nvxgram.ios
+          lipo -verify_arch arm64 "$NVX_APP/Telegram"
+          codesign --verify --deep --strict "$NVX_APP"
+          mv "$RUNNER_TEMP/nvxgram-artifacts/Telegram.ipa" "$RUNNER_TEMP/nvxgram-artifacts/NVXGram-v0.1-arm64.ipa"
+      - uses: actions/upload-artifact@v4
         with:
-          tag_name: build-${{ env.BUILD_NUMBER }}
-          release_name: Telegram ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
-          body: |
-            An unsigned build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
-          draft: false
-          prerelease: false
-
-      - name: Upload Release IPA
-        id: upload-release-ipa 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
-          asset_name: Telegram.ipa
-          asset_content_type: application/zip
-
-      - name: Upload Release DSYM
-        id: upload-release-dsym 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.DSYMs.zip
-          asset_name: Telegram.DSYMs.zip
-          asset_content_type: application/zip
+          name: NVXGram-v0.1-arm64-unverified-on-device
+          path: ${{ runner.temp }}/nvxgram-artifacts/NVXGram-v0.1-arm64.ipa
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/nvxgram-signing/build.keychain-db" 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP/nvxgram-signing" "$RUNNER_TEMP/nvxgram-inspect"
