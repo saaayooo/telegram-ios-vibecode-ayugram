@@ -16,20 +16,22 @@ private final class AccountPresenceManagerImpl {
     private let currentRequestDisposable = MetaDisposable()
     private var onlineTimer: SignalKitTimer?
     
-    private var wasOnline: Bool = false
+    private var wasOnline: Bool?
+    private var wasActive: Bool?
     
     init(queue: Queue, shouldKeepOnlinePresence: Signal<Bool, NoError>, network: Network) {
         self.queue = queue
         self.network = network
         
-        self.shouldKeepOnlinePresenceDisposable = (shouldKeepOnlinePresence
-        |> distinctUntilChanged
-        |> deliverOn(self.queue)).start(next: { [weak self] value in
+        self.shouldKeepOnlinePresenceDisposable = (combineLatest(shouldKeepOnlinePresence, NVXGramPreferences.shared.signal)
+        |> deliverOn(self.queue)).start(next: { [weak self] active, settings in
             guard let `self` = self else {
                 return
             }
-            if self.wasOnline != value {
+            let value = settings.shouldPublishOnline(isActive: active)
+            if self.wasOnline != value || self.wasActive != active {
                 self.wasOnline = value
+                self.wasActive = active
                 self.updatePresence(value)
             }
         })
@@ -44,19 +46,21 @@ private final class AccountPresenceManagerImpl {
     
     private func updatePresence(_ isOnline: Bool) {
         let request: Signal<Api.Bool, MTRpcError>
-        if isOnline {
+        self.onlineTimer?.invalidate()
+        self.onlineTimer = nil
+        if self.wasActive == true {
             let timer = SignalKitTimer(timeout: 30.0, repeat: false, completion: { [weak self] in
                 guard let strongSelf = self else {
                     return
                 }
-                strongSelf.updatePresence(true)
+                strongSelf.updatePresence(strongSelf.wasOnline ?? false)
             }, queue: self.queue)
             self.onlineTimer = timer
             timer.start()
+        }
+        if isOnline {
             request = self.network.request(Api.functions.account.updateStatus(offline: .boolFalse))
         } else {
-            self.onlineTimer?.invalidate()
-            self.onlineTimer = nil
             request = self.network.request(Api.functions.account.updateStatus(offline: .boolTrue))
         }
         self.isPerformingUpdate.set(true)

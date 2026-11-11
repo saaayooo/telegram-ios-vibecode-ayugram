@@ -2267,6 +2267,7 @@ public final class PendingMessageManager {
         
         let queue = self.queue
         return applyUpdateMessage(postbox: postbox, stateManager: stateManager, message: message, cacheReferenceKey: content.cacheReferenceKey, result: result, accountPeerId: self.accountPeerId, pendingMessageEvent: { [weak self] pendingMessageDelivered in
+            self?.nvxgramRestoreOfflineAfterSend()
             queue.async {
                 if let strongSelf = self {
                     if let context = strongSelf.peerSummaryContexts[message.id.peerId] {
@@ -2316,6 +2317,7 @@ public final class PendingMessageManager {
         let queue = self.queue
         
         return applyUpdateGroupMessages(postbox: postbox, stateManager: stateManager, messages: messages, result: result, pendingMessageEvents: { [weak self] pendingMessagesDelivered in
+            if !pendingMessagesDelivered.isEmpty { self?.nvxgramRestoreOfflineAfterSend() }
             queue.async {
                 if let strongSelf = self {
                     if let message = messages.first, let context = strongSelf.peerSummaryContexts[message.id.peerId], !pendingMessagesDelivered.isEmpty {
@@ -2328,6 +2330,12 @@ public final class PendingMessageManager {
         })
     }
     
+    private func nvxgramRestoreOfflineAfterSend() {
+        guard NVXGramPreferences.shared.current.ghostMode else { return }
+        let _ = (self.network.request(Api.functions.account.updateStatus(offline: .boolTrue))
+        |> `catch` { _ -> Signal<Api.Bool, NoError> in .single(.boolFalse) }).startStandalone()
+    }
+
     public func deliveredMessageEvents(peerId: PeerId) -> Signal<[PeerPendingMessageDelivered], NoError> {
         return Signal { subscriber in
             let disposable = MetaDisposable()
