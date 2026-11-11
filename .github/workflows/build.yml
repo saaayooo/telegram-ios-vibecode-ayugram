@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       build_ipa:
-        description: 'Build private arm64 IPA after owner configures signing secrets'
+        description: 'Build arm64 IPA artifact after owner configures signing secrets'
         type: boolean
         default: false
 permissions:

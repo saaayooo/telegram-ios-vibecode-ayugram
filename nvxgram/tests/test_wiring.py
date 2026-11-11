@@ -5,6 +5,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 def read(path):
     return (ROOT / path).read_text()
 class Wiring(unittest.TestCase):
+    def test_tgcalls_url_is_fork_safe(self):
+        s = read('.gitmodules')
+        self.assertIn('url=https://github.com/TelegramMessenger/tgcalls.git', s)
+        self.assertNotIn('url=../tgcalls.git', s)
+
     def test_presence_native_transport_remains(self):
         s = read('submodules/TelegramCore/Sources/State/ManagedAccountPresence.swift')
         self.assertIn('combineLatest(shouldKeepOnlinePresence, NVXGramPreferences.shared.signal)', s)

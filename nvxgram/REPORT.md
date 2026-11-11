@@ -7,17 +7,19 @@
 ## Реализовано и проверено
 
 - Найдены реальные запросы presence, typing и read state; карта ниже.
-- Добавлены пять Python-проверок связей исходников: `python3 -m unittest discover -s nvxgram/tests -v` — 5/5 PASS в Linux. Это проверки исходников, **не** проверка запросов к Telegram.
+- Добавлены пять Python-проверок связей исходников: `python3 -m unittest discover -s nvxgram/tests -v` — 5/5 PASS в Linux и macOS Actions. Это проверки исходников, **не** проверка запросов к Telegram.
 - `python3 build-system/Make/PostboxImportCheck.py` — PASS.
 - `python3 -m py_compile nvxgram/prepare_build.py` — PASS.
 - `git diff --check`, `bash -n nvxgram/test.sh`, YAML parse и базовые проверки workflow — PASS.
 - Проверен отказ `prepare_build.py` при отсутствии секретов: остановка до создания signing material, перечислены только имена отсутствующих secrets.
-- Доступность Xcode 27.1 подтверждена в опубликованном списке образа GitHub `xcode-27` (image 20261104.0337.1, Xcode build 27A9275). Реального runner пока нет.
+- Реальный GitHub runner `xcode-27` подтвердил Xcode 27.1 (27A9275), macOS 27.0.1, arm64. [Успешный запуск verify](https://github.com/saaayooo/telegram-ios-vibecode-ayugram/actions/runs/43094429056), исходники `b323df2f`.
+- 24 Swift-проверки политики Ghost/нечиталки и пересоздания persistent store — PASS на этом runner. Это тесты решений и хранения, не интеграционный тест сети и не перезапуск iOS-процесса.
+- Синтаксический разбор всех 13 изменённых Swift-файлов — PASS. Это не type check и не компиляция приложения целиком.
 - Удалён upstream workflow, публиковавший Release на push. Новый workflow сохраняет только Artifact после ручного запуска сборки; прав на создание Release нет.
 
 ## Реализовано, но не проверено на устройстве
 
-Всё перечисленное ниже — изменения исходников, ожидающие компиляции, тестов на macOS и проверки с двумя аккаунтами.
+Всё перечисленное ниже — изменения исходников, ожидающие полной компиляции и проверки с двумя аккаунтами. Проверки чистой политики и синтаксиса на macOS уже прошли.
 
 - Settings → NVXGram: два нативных переключателя, оба OFF по умолчанию. UserDefaults сохраняет настройки для установки приложения, сразу для всех аккаунтов; аккаунтные данные там не хранятся.
 - Ghost: `AccountPresenceManager` получает настройку до первого запроса; при включении и работе в foreground запрашивает offline вместо online, повторяет раз в 30 секунд. В background повторения прекращаются. Выключение возвращает штатный online.
@@ -27,8 +29,7 @@
 - При неизвестных cached TTL, неизвестном сообщении, secret media, Autoremove/Autoclear используется штатное чтение. Отложенная очередь read для заблокированных автоматических просмотров не создаётся.
 - Ручное «Прочитать»/«Прочитать всё» в списке чатов использует исходный interactive API и продолжает синхронизироваться. При отключении нечиталки откройте чат заново, чтобы применилось штатное чтение уже видимой истории.
 - Авторизация, запросы updates/difference, transport keepalive, загрузка истории, входящие read updates других сеансов и синхронизация pending операций не изменены. Это не доказывает отсутствие регрессий — требуется полноценный запуск.
-- Добавлены 24 Swift-проверки таблиц политики и пересоздания persistent store (`bash nvxgram/test.sh`); **не запускались**, Swift/Xcode в Linux-среде отсутствуют. Это тесты решений и хранения, не интеграционный тест сети и не перезапуск iOS-процесса.
-- Workflow: macOS `xcode-27`, проверка точной версии из versions.json без override, Swift tests + syntax parse, отдельный ручной build `release_arm64`, отдельный Bundle ID `org.nvxgram.ios`, временная подпись через Secrets, проверка bundle/arm64/signature, Artifact на 7 дней. **Workflow ещё не запускался; полный type check не выполнен.**
+- Workflow: macOS `xcode-27`, проверка точной версии из versions.json без override, Swift tests + syntax parse, отдельный ручной build `release_arm64`, отдельный Bundle ID `org.nvxgram.ios`, временная подпись через Secrets, проверка bundle/arm64/signature, Artifact на 7 дней. **Job verify прошёл; полный type check и сборка приложения не выполнены.**
 
 ## Ограничено сервером Telegram
 
@@ -48,9 +49,13 @@
 - Регистрация Bundle ID в Apple Developer, сертификат и profiles для приложения/расширений: требует владельца. `org.nvxgram.ios` — подготовленный идентификатор, ещё не зарегистрированный.
 - Отдельная иконка NVXGram: upstream assets сохранены; перед распространением нужна собственная иконка по условиям README. Имя приложения изменено на NVXGram, экспериментальный характер указан в настройках.
 
-## Блокер GitHub
+## GitHub и действия владельца
 
-`gh auth status` подтверждает подключение аккаунта saaayooo. Попытка создать private `saaayooo/NVXGram` отклонена GitHub: `GraphQL: Resource not accessible by integration (createRepository)`. Репозиторий не создан; исходники никуда не отправлены. Нужен URL пустого private-репозитория, созданного владельцем, с доступом интеграции на запись contents и workflows. Ошибка GitHub API — не отказ автоматической проверки одобрения.
+Владелец создал [форк saaayooo/telegram-ios-vibecode-ayugram](https://github.com/saaayooo/telegram-ios-vibecode-ayugram). Ветка `nvxgram-v0.1` загружена без изменения master. Блокер создания репозитория устранён. Форк публичный; Artifact в нём не следует считать приватным, хотя workflow не создаёт Release и не загружает TestFlight.
+
+GitHub API позволяет push, чтение Actions и workflow_dispatch, но отклоняет чтение списка Secrets и настроек Actions с `HTTP 403: Resource not accessible by integration`. Поэтому состав секретов проверяется только при запуске сборки, значения не читаются и не выводятся. Это ограничение GitHub API, не отказ автоматической проверки одобрения.
+
+[Запуск signed build](https://github.com/saaayooo/telegram-ios-vibecode-ayugram/actions/runs/43094598567) остановился до credentials/компиляции: upstream relative URL `../tgcalls.git` в форке разрешился в несуществующий `saaayooo/tgcalls`. URL исправлен на `https://github.com/TelegramMessenger/tgcalls.git`; закреплённый SHA `c1de0882de9013df246252129b95430f48b20eec` подтверждён GitHub API и не изменён. Требуемые owner credentials описаны в OWNER_SETUP.md. IPA отсутствует до прохождения полной сборки и проверок.
 
 ## Карта механизмов
 
